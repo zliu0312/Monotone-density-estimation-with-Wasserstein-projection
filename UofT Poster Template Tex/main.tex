@@ -1,0 +1,242 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{xcolor}
+
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator{\proj}{proj}
+\DeclareMathOperator{\tr}{Tr}
+\DeclareMathOperator{\Cov}{Cov}
+\DeclareMathOperator{\bE}{\mathbb{E}}
+\DeclareMathOperator*{\essinf}{ess\,inf}
+\newcommand{\bP}{\mathbb{P}}
+\newcommand{\bR}{\mathbb{R}}
+\newcommand{\sD}{\mathsf{D}}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\X}{\mathcal{X}}
+\newcommand{\cA}{\mathcal{A}}
+\newcommand{\cB}{\mathcal{B}}
+\newcommand{\cC}{\mathcal{C}}
+\newcommand{\cE}{\mathcal{E}}
+\newcommand{\cF}{\mathcal{F}}
+\newcommand{\cP}{\mathcal{P}}
+\newcommand{\cQ}{\mathcal{Q}}
+\newcommand{\cT}{\mathcal{T}}
+\newcommand{\cX}{\mathcal{X}}
+\newcommand{\cY}{\mathcal{Y}}
+\newcommand{\W}{\mathcal{W}_2}
+\newcommand{\id}{\mathrm{id}}
+
+
+\numberwithin{equation}{section}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\newtheorem{condition}[theorem]{Condition}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{example}{Example}
+
+
+
+
+
+
+\title{UTSSRP Project 2025 (Wong)\\
+{\large Monotone density estimation with Wasserstein projection}}
+\author{}
+\date{June 2025}
+
+\begin{document}
+
+\maketitle
+
+\section{Background}
+Let $x_1, \ldots, x_n$ be independent samples from an unknown density $f$ on $\bR^d$. The problem of {\it density estimation} is to use the samples to compute an estimate $\hat{f}_n$ of $f$. A common {\it nonparametric} density estimator is the {\it kernel density estimator} given by
+\begin{equation} \label{eqn:kernel.density.estimator}
+\hat{f}(x) = \frac{1}{n} \sum_{i = 1}^n \frac{1}{h}K\left( \frac{x - x_i}{h}\right),
+\end{equation}
+where the {\it kernel} $K$ is a given density function (such as standard normal), and $h > 0$ is a tunable parameter called the {\it bandwidth}. A basic discussion can be found in \cite[Section 18.4]{K10}. In R, the function \texttt{density()} performs kernel density estimation, where the bandwidth is chosen automatically based on the sample size.
+
+Sometimes it is known {\it a priori}, or makes sense to {\it assume}, that the density $f$ satisfies a {\it shape constraint}. For example, it may be reasonable to restrict $f$ to the class of {\it unimodel}, {\it non-increasing}, or {\it log-concave} densities. See \cite{D24} for an overview of {\it shape-constrained statistical inference}. Note that the kernel density estimator $\hat{f}$ given by \eqref{eqn:kernel.density.estimator} may not satisfy the given constraint, so other methodologies may be needed to output an estimate in the chosen class.
+
+\medskip
+
+
+{\bf For the purposes of this project, we consider the following setting:}
+\begin{itemize}
+\item $d = 1$, so $X_1, X_2, \ldots$ are {\it univariate} random variables.
+\item $X_i \geq 0$, so the density $f$ is supported on $\bR_+ = [0, \infty)$, the non-negative real line.
+\item Our shape constraint is that $f$ is {\it non-increasing} on $\bR_+$:
+\[
+x \leq y \Rightarrow f(x) \geq f(y).
+\]
+%For technical purposes we also assume $\cF$ contains the point mass $\delta_0$ at $0$. A chracterization of $\cF$ is given in Lemma \ref{lem:shape.constraint} below. 
+\item For technical purposes, we assume additionally that the density $f$ has finite second moment.
+\end{itemize}
+Let $\cF_0$ be the set of all densities on $\bR_+$ satisfying this shape constraint. 
+
+
+\begin{example}
+It is easy to see that $\cF_0$ contains all exponential distributions $\mathrm{Exp}(\lambda)$ and uniform distributions $\mathrm{Unif}(0, \theta)$ for $\theta > 0$.
+\end{example}
+
+A common approach to shape-constrained density estimation is {\it maximum likelihood estimation}. In our context this means the following. Let data points $x_1, \ldots, x_n > 0$ be given. For $f \in \cF_0$, the {\it log-likelihood} is defined by
+\[
+\sum_{i = 1}^n \log f(x_i),
+\]
+where $\log f(x_i) = -\infty$ if $f(x_i) = 0$. We say that $\hat{f} \in \cF_0$ is a (nonparametric) {\it maximum likelihood estimate}\footnote{Following standard convention, an {\it estimate} is the realized value of the estimator given realized data. Conversely, if we replace $x_1, \ldots, x_n$ by the random variables $X_1, \ldots, X_n$, the same formula defines an {\it estimator} (which is itself a random element).} with respect to the family $\cF_0$ if
+\begin{equation} \label{eqn:MLE}
+\hat{f} \in \argmax_{f \in \cF_0} \sum_{i = 1}^n \log f(x_i).
+\end{equation}
+This estimator was introduced by Grenander in \cite{G56} and hence is called the {\it Grenander estimator}. In fact, Grenander proved that $\hat{f}$ is given by the slopes of the {\it least concave majorant} of the empirical distribution function of the data. One way to implement the Grenander estimator is to use the function \texttt{grenader} in the R package \texttt{fdrtool}.
+
+\section{Density estimation with Wasserstein projection}
+In this project, we consider an alternative approach to monotone density estimation using the theory of {\it optimal transport}. We refer the reader to \cite{S15} for a systematic introduction to optimal transport. Our approach is motivated by recent interactions between optimal transport and statistical inference, see e.g.~\cite{AM22, PZ20}.
+
+We begin by defining the {\it $2$-Wasserstein distance} between univariate distributions. If $\mu$ is a probability distribution (measure) on $\bR$,\footnote{Since we will work with distributions on $\bR_+$ we may replace $\bR$ by $\bR_+$.} we let
+\[
+F_{\mu}(x) = \mu((-\infty, x]), \quad u \in \bR,
+\]
+be its {\it distribution function}, and
+\[
+Q_{\mu}(u) = \inf\{ x : F_{\mu}(x) \geq u \}, \quad u \in [0, 1],
+\]
+be its {\it (generalized) quantile function} which is left-continuous by construction. When $F_{\mu}$ is strictly increasing, we have $Q_{\mu} = F_{\mu}^{-1}$. The most important property is that if $U \sim \mathrm{Unif}(0, 1)$, then $X = Q_{\mu}(X)$ is distributed as $\mu$. 
+
+\begin{definition}
+We let $\cP_2(\bR)$ be the set of probability distributions on $\bR$ with finite second moment, i.e., $\int_{\bR} x^2 \dd \mu(x) < \infty$.
+\end{definition}
+
+\begin{proposition}
+A probability distribution $\mu$ on $\bR$ is an element of $\cP_2(\bR)$ if and only if $Q_{\mu} \in L^2([0, 1])$, i.e.,
+\[
+\| Q_{\mu} \|_{L^2([0, 1]}^2 := \int_0^1 Q_{\mu}(u)^2 \dd u < \infty.
+\]
+\end{proposition}
+\begin{proof}
+We simply note that
+\begin{equation*}
+\begin{split}
+\int_{\bR} x^2 \dd \mu(x) &= \bE_{X \sim \mu}[X^2] = \bE_{U \sim \mathrm{Unif}(0, 1)}[Q_{\mu}(U)^2] \\
+&= \int_0^1 Q_{\mu}(u)^2 \dd u = \| Q_{\mu} \|_{L^2([0, 1])}^2.
+\end{split}
+\end{equation*}
+So $\mu$ has finite second moment if and only if $\| Q_{\mu} \|_{L^2([0, 1])} < \infty$.
+\end{proof}
+
+\begin{definition}[$2$-Wasserstein distance on $\cP_2(\bR)$] \label{def:2.Wasserstein.univariate}
+For $\mu, \nu \in \cP_2(\bR)$, we define the $2$-Wasserstein distance $\W(\mu, \nu)$ by
+\begin{equation} \label{eqn:W2.univariate}
+\W(\mu, \nu) = \| Q_{\mu} - Q_{\nu} \|_{L^2([0, 1])}.
+\end{equation}
+\end{definition}
+
+That is, $\W(\mu, \nu)$ is simply the $L^2$-distance between the quantile functions of $\mu$ and $\nu$. It can be shown that this is equivalent to the (original) definition
+\begin{equation} \label{eqn:W2.original}
+\W(\mu, \nu) = \left( \inf \left\{ \bE\left[ (X - Y)^2 \right]  : X \sim \mu, Y \sim \nu \right\} \right)^{1/2},
+\end{equation}
+where the infimum is over all joint distributions (i.e., {\it couplings}) for $(X, Y)$ such that $X \sim \mu$ and $Y \sim \nu$. The $2$-Wasserstein distance defines a metric (distance) on $\cP_2(\bR)$. The representation \eqref{eqn:W2.univariate} shows that the metric space $(\cP_2(\bR), \W)$ is {\it isometric} to the set of $L^2$ quantile functions equipped with the $L^2$ distance. This is a tremendous simplification which will play a crucial role in our study. 
+
+\medskip
+
+We consider monotoncity of the density in terms of the quantile function. To fix ideas, we begin with an example.
+
+\begin{example}
+Let $\mu \in \mathrm{Exp}(1)$. Its density is $f_{\mu}(x) = e^{-x}$, which is non-increasing. The cdf is $F_{\mu}(x) = 1 - e^{-x}$. The quantile function is
+\[
+Q_{\mu}(u) = -\log(1 - u), \quad u \in [0, 1].
+\]
+Note that $Q_{\mu}(0) = \lim_{u \rightarrow 0^+} Q_{\mu}(u) = 0$ and $Q_{\mu}$ is convex on $[0, 1]$.
+\end{example}
+
+\begin{proposition}
+Suppose $f$ is a non-increasing probability density on $\bR_+$. Let $Q$ be the corresponding quantile function. Then $Q(0) = \lim_{u \rightarrow 0^+} Q(u) = 0$ and $Q$ is convex on $[0, 1]$.
+\end{proposition}
+\begin{proof}
+Exercise. Also try to formulate a converse. That is, characterize $\mu$ if $Q_{\mu}$ satisfies the two properties.
+\end{proof}
+
+We introduce a set $\cF \subset \cP_2(\bR)$ that captures the shape constraint. It is slightly different from $\cF_0$.
+
+\begin{definition}
+Let $\cF$ be the set of probability distribution $\mu$ on $\bR_+$ whose quantile fucntion $Q_{\mu}$ satisfies the following properties:
+\begin{itemize}
+\item[(i)] $Q_{\mu}$ is non-decreasing (this always holds and is stated for completeness).
+\item[(ii)] $Q_{\mu}(0) = \lim_{u \rightarrow 0^+} Q_{\mu}(u) = 0$.
+\item[(iii)] $Q_{\mu}$ is convex.
+\end{itemize}
+\end{definition}
+
+\begin{proposition} \label{prop:Q.geometry}
+Let $\cQ = \{Q_{\mu} : \mu \in \cF\}$ be the set of quantile functions of distributions in $\cF$, regarded as a subset of $L^2([0, 1])$. Then:
+\begin{itemize}
+\item[(i)] $\cQ$ is convex.
+\item[(ii)] $\cQ$ is closed in $L^2$: if $Q_n \in \cQ$, $n \geq 1$, is a sequence such that $\|Q_n - Q\|_{L^2([0, 1])} \rightarrow 0$ for some $Q \in L^2([0, 1])$, then $Q \in \cQ$.\footnote{More precisely, there exists a quantile function $\tilde{Q} \in \cQ$ such that $Q = \tilde{Q}$ almost everywhere. This technicality is needed since two functions are identified in $L^2([0, 1])$ if they agree almost everywhere.} 
+\end{itemize}
+\end{proposition}
+\begin{proof}
+Since (i) is immediate, we will only prove (ii). Since $Q_n$ is non-decreasing and convex with $Q_n(0) = \lim_{u \rightarrow 0^+} Q_n(u) = 0$ for all $n$, we may extend $Q_n$ to a non-decreasing convex function on $\bR$ by letting $Q_n(u) = 0$ for $u \leq 0$. Since $Q_n \rightarrow Q$ in $L^2([0, 1])$, there exists a subsequence $Q_{n'}$ along which $Q_{n'} \rightarrow Q$ almost everywhere on $[0, 1]$. By \cite[Theorem 10.8]{R70}, $Q_n$ converges pointwise on $\bR$ to a convex function $\tilde{Q}$ which is a.e.~equal to $Q$ on $[0, 1]$. Clearly, $\tilde{Q}$ is non-decreasing. Also, we have $\tilde{Q}(0) = \lim_{n' \rightarrow 0} Q_{n'}(0) = 0$. Furthermore, since $\tilde{Q}$ is continuous at $0$ by \cite[Theorem 10.1]{R70}, we have $\tilde{Q}(0) = \lim_{u \rightarrow 0^+} \tilde{Q}(u) = 0$.
+\end{proof}
+
+\begin{remark}[Discussion] { \ }
+\begin{itemize}
+\item[(i)] In fact, we may show that $\cF = \overline{\cF_0}^{\W}$ is the closure of $\cF_0$ in the Wasserstein space $(\cP_2(\bR), \W)$.
+\item[(ii)] Proposition \ref{prop:Q.geometry} states that $\cF$ may be regarded as a closed convex subset of the Wasserstein space under the isometry \eqref{eqn:W2.univariate}. Convexity corresponds to geodesic convexity in the sense of McCann's displacement interpolation \cite{R97}.
+\end{itemize}
+\end{remark}
+
+\begin{theorem}[Wasserstein projection]
+For any $\mu \in \cP_2(\bR_+)$, there exists unique $\mu^* \in \cF$ such that 
+\begin{equation} \label{eqn:Wasserstein.projection}
+\mu^* = \argmin_{\nu \in \cF} \W(\nu, \mu).
+\end{equation}
+We call $\mu^* = \proj_{\cF} \mu$ the Wasserstein projection of $\mu$ onto $\cF$.
+\end{theorem}
+\begin{proof}
+From the isometry \eqref{eqn:W2.univariate} under which a distribution $\nu$ is identified with its quantile function $Q_{\nu}$, the problem $\min_{\nu \in \cF} \W(\nu, \mu)$ is equivalent to the $L^2$ projection problem
+\begin{equation} \label{eqn:L2.projection}
+\min_{Q \in \cQ} \|Q - Q_{\mu}\|_{L^2([0, 1])}^2.
+\end{equation}
+Since $\cQ \subset L^2([0, 1])$ is a closed and convex subset by Proposition \ref{prop:Q.geometry}, by the Hilbert projection theorem there exists a unique solution $Q^* \in \cQ$. We may let $\mu^*$ be the (unique) distribution whose quantile function is $Q^*$.
+\end{proof}
+
+We define a new monotone density estimator based on the Wasserstein projection.
+
+\begin{theorem}[Wasserstein density estimator]
+Given data points $x_1, \ldots, x_n \geq 0$, consider the empirical distribution $\mu_n = \sum_{i = 1}^n \frac{1}{n} \delta_{x_i}$. The Wasserstein density estimate $\hat{\mu}_n$ with respect to $\cF$ is defined by the Wasserstein projection onto $\cF$:
+\begin{equation} \label{eqn:W2.estimator}
+\hat{\mu}_n = \proj_{\cF} \mu_n.
+\end{equation}
+\end{theorem}
+
+\begin{remark}
+While other shape constraints may be considered, for concreteness and simplicity we focus on $\cF$.
+\end{remark}
+
+\section{Research directions}
+\begin{itemize}
+\item[(i)] Implementation (possibly after a suitable discretization) of the Wassersten density estimator \eqref{eqn:Wasserstein.projection}. From \eqref{eqn:L2.projection}, it is an $L^2$ projection problem which is {\it convex}.
+\item[(ii)] Numerical experiments using simulated data.
+\item[(iii)] (May be difficult.) Theoretical properties of the Wasserstein density estimator, esp.~in comparison with those of the Grenander estimator. For example, is it true that $\hat{\mu}_n$ always has a piecewise constant density? Also, can we prove that the density of $\hat{\mu}_n$ converges to that of $\mu$? If so, at what rate? What happens if $\mu \notin \cF$, i.e., the model is misspecified?
+\end{itemize}
+
+
+
+\bibliographystyle{plain}
+\bibliography{references} 
+
+
+
+
+\end{document}
+
+
+
+
